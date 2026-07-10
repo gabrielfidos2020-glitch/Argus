@@ -1,0 +1,18 @@
+{
+  "name": "scraper",
+  "version": "1.0.0",
+  "description": "Serviço de scraping com Playwright para o projeto de prospecção automatizada",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "axios": "^1.7.2",
+    "cheerio": "^1.0.0-rc.12"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

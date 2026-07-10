@@ -1,0 +1,178 @@
+services:
+
+  # ─────────────────────────────────────────
+  # n8n — Automação de workflows
+  # Acesso: http://localhost:5678
+  # ─────────────────────────────────────────
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_USER:-admin}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD:-admin}
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=America/Sao_Paulo
+      - TZ=America/Sao_Paulo
+    volumes:
+      - n8n_data:/home/node/.n8n
+    networks:
+      - prospeccao-net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:5678/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ─────────────────────────────────────────
+  # Evolution API — Envio de mensagens WhatsApp
+  # Acesso: http://localhost:8080
+  # ─────────────────────────────────────────
+  evolution-api:
+    image: evoapicloud/evolution-api:latest
+    container_name: evolution-api
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=postgresql://postgres:postgres@prospeccao-postgres:5432/evolution?schema=public
+      - CACHE_REDIS_ENABLED=false
+      - AUTHENTICATION_TYPE=apikey
+      - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY:-changeme}
+      - AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES=true
+      - QRCODE_LIMIT=30
+      - QRCODE_COLOR=#198754
+      - SERVER_URL=http://localhost:8080
+      - DEL_INSTANCE=false
+      - LANGUAGE=pt-BR
+      - TZ=America/Sao_Paulo
+    volumes:
+      - evolution_instances:/evolution/instances
+      - evolution_store:/evolution/store
+    networks:
+      - prospeccao-net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - postgres
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  # ─────────────────────────────────────────
+  # Postgres — Banco de dados para a Evolution API (Prisma ORM)
+  # ─────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: prospeccao-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=evolution
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - prospeccao-net
+
+  # ─────────────────────────────────────────
+  # Ollama — IA Local (Alternativa leve ao LM Studio)
+  # Acesso: http://localhost:11434
+  # ─────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: prospeccao-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - prospeccao-net
+    environment:
+      - OLLAMA_KEEP_ALIVE=24h
+      - TZ=America/Sao_Paulo
+
+  # ─────────────────────────────────────────
+  # Instagrapi — Envio de DMs no Instagram
+  # Acesso: http://localhost:8001
+  # ─────────────────────────────────────────
+  instagrapi:
+    build:
+      context: ./instagrapi
+      dockerfile: Dockerfile
+    container_name: instagrapi
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      - INSTAGRAM_USERNAME=${INSTAGRAM_USERNAME:-}
+      - INSTAGRAM_PASSWORD=${INSTAGRAM_PASSWORD:-}
+      - TZ=America/Sao_Paulo
+    networks:
+      - prospeccao-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ─────────────────────────────────────────
+  # Scraper — Node.js + Playwright (Google Maps)
+  # Acesso: http://localhost:3000
+  # ─────────────────────────────────────────
+  scraper:
+    build:
+      context: ./scraper
+      dockerfile: Dockerfile
+    container_name: scraper
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - LM_STUDIO_URL=http://host.docker.internal:1234/v1
+      - TZ=America/Sao_Paulo
+    networks:
+      - prospeccao-net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+# ─────────────────────────────────────────
+# Rede compartilhada entre todos os containers
+# ─────────────────────────────────────────
+networks:
+  prospeccao-net:
+    driver: bridge
+
+# ─────────────────────────────────────────
+# Volumes persistentes
+# ─────────────────────────────────────────
+volumes:
+  n8n_data:
+    name: prospeccao_n8n_data
+  evolution_instances:
+    name: prospeccao_evolution_instances
+  evolution_store:
+    name: prospeccao_evolution_store
+  postgres_data:
+    name: prospeccao_postgres_data
+  ollama_data:
+    name: prospeccao_ollama_data
