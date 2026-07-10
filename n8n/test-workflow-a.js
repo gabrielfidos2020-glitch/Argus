@@ -62,6 +62,14 @@ function temSiteProprio(site) {
   return !REDES_SOCIAIS.some(d => site.toLowerCase().includes(d));
 }
 
+function extrairDominio(site) {
+  try {
+    return new URL(site).hostname.replace(/^www\./, '');
+  } catch {
+    return site.trim().toLowerCase();
+  }
+}
+
 async function executarWorkflowA() {
   console.log('─'.repeat(60));
   console.log('  WORKFLOW A — CAPTAÇÃO DE LEADS');
@@ -85,6 +93,7 @@ async function executarWorkflowA() {
   const leads_com_site    = [];
   const leads_sem_site    = [];
   const leads_descartados = [];
+  const dominiosVistos    = new Set();
   let indiceCanal = 0;
 
   leads.forEach((lead) => {
@@ -106,8 +115,17 @@ async function executarWorkflowA() {
       canal,
       tem_site,
     };
-    if (tem_site) leads_com_site.push(lp);
-    else          leads_sem_site.push(lp);
+    if (tem_site) {
+      const dominio = extrairDominio(lead.site);
+      if (dominiosVistos.has(dominio)) {
+        leads_descartados.push({ nome: lp.nome, categoria: lp.categoria, motivo: 'dominio_duplicado', dominio });
+        return;
+      }
+      dominiosVistos.add(dominio);
+      leads_com_site.push(lp);
+    } else {
+      leads_sem_site.push(lp);
+    }
   });
 
   const resumo = {
